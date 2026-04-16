@@ -1,0 +1,7 @@
+node_modules/
+prices.db
+prices.db-shm
+prices.db-wal
+*.log
+.env
+.env.*

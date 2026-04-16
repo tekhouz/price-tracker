@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Price Tracker — Amazon · Back Market · eBay</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2d3048;
+      --text: #e8eaf0; --muted: #8b90a8; --radius: 10px;
+      --amazon: #ff9900; --bm: #25c88d; --ebay: #3665f3; --red: #ff5c5c;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+    /* ── Header ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; gap: 12px; }
+    .logo { width:36px; height:36px; border-radius:9px; background: linear-gradient(135deg,var(--amazon),var(--bm)); display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0; }
+    header h1 { font-size:1.1rem; font-weight:700; }
+    header small { color:var(--muted); font-size:.75rem; margin-left:6px; }
+
+    /* ── Tabs ── */
+    .tabs { display:flex; gap:2px; padding:0 28px; background:var(--surface); border-bottom:1px solid var(--border); }
+    .tab-btn { background:none; border:none; color:var(--muted); padding:12px 18px; font-size:.88rem; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; transition:.15s; }
+    .tab-btn.active { color:var(--text); border-bottom-color:var(--bm); }
+    .tab-btn:hover:not(.active) { color:var(--text); }
+
+    /* ── Layout ── */
+    main { max-width:1200px; margin:0 auto; padding:24px 20px; }
+    .panel { display:none; } .panel.active { display:block; }
+
+    /* ── Card ── */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:20px; overflow:hidden; }
+    .card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+    .card-head h2 { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
+    .card-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .card-foot { padding:14px 20px; border-top:1px solid var(--border); display:flex; align-items:center; gap:14px; }
+
+    /* ── Buttons ── */
+    .btn { border:none; border-radius:7px; padding:8px 16px; font-size:.82rem; font-weight:600; cursor:pointer; transition:opacity .15s, transform .1s; }
+    .btn:active { transform:scale(.97); }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-primary { background:linear-gradient(135deg,var(--bm),#1aa870); color:#fff; }
+    .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+    .btn-danger { background:rgba(255,92,92,.12); color:var(--red); border:1px solid rgba(255,92,92,.2); }
+    .btn-sm { padding:5px 10px; font-size:.75rem; }
+    .btn-icon { background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; padding:2px 6px; border-radius:4px; }
+    .btn-icon:hover { color:var(--red); background:rgba(255,92,92,.08); }
+    .btn-upload { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px 16px; font-size:.82rem; font-weight:600; cursor:pointer; }
+    .btn-upload:hover { border-color:var(--bm); }
+
+    /* ── Input Table ── */
+    .table-wrap { overflow-x:auto; }
+    table.input-tbl { width:100%; border-collapse:collapse; }
+    table.input-tbl th { padding:10px 12px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap; text-align:left; }
+    table.input-tbl td { padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    table.input-tbl tr:last-child td { border-bottom:none; }
+    table.input-tbl .rn { color:var(--muted); font-size:.8rem; text-align:center; width:32px; }
+    table.input-tbl input[type=text] {
+      width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px;
+      padding:7px 10px; color:var(--text); font-size:.82rem; outline:none; transition:border-color .15s;
+    }
+    table.input-tbl input[type=text]:focus { border-color:var(--bm); }
+    table.input-tbl input[type=text]::placeholder { color:#434768; }
+
+    /* ── Progress bar ── */
+    .progress-wrap { padding:14px 20px; }
+    .progress-label { display:flex; justify-content:space-between; font-size:.78rem; color:var(--muted); margin-bottom:6px; }
+    .progress-bar { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .progress-fill { height:100%; background:linear-gradient(90deg,var(--bm),var(--amazon)); border-radius:2px; transition:width .4s ease; }
+    .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--bm); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Results Summary Table ── */
+    table.res-tbl { width:100%; border-collapse:collapse; }
+    table.res-tbl th { padding:10px 14px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+    table.res-tbl td { padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:middle; font-size:.82rem; }
+    table.res-tbl tr.summary-row:hover td { background:var(--surface2); cursor:pointer; }
+    table.res-tbl tr.detail-row td { padding:0; }
+    table.res-tbl tr.detail-row.hidden { display:none; }
+    .product-label { font-weight:600; line-height:1.4; }
+    .product-sub { font-size:.72rem; color:var(--muted); margin-top:2px; }
+    .price-cell { font-weight:700; font-size:.95rem; }
+    .price-cell.amazon { color:var(--amazon); }
+    .price-cell.bm { color:var(--bm); }
+    .price-cell.ebay { color:var(--ebay); }
+    .price-cell.none { color:var(--muted); font-weight:400; font-size:.8rem; }
+    .badge { display:inline-block; font-size:.65rem; font-weight:700; padding:2px 7px; border-radius:4px; }
+    .badge-best { background:rgba(37,200,141,.18); color:var(--bm); }
+    .badge-saving { background:rgba(255,153,0,.12); color:var(--amazon); }
+    .badge-status-searching { color:var(--muted); font-size:.78rem; }
+
+    /* ── Detail expansion ── */
+    .detail-inner { padding:16px 20px; background:var(--surface2); border-bottom:1px solid var(--border); }
+    .detail-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; }
+    @media(max-width:760px) { .detail-grid { grid-template-columns:1fr; } }
+    .detail-col h4 { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.7px; margin-bottom:10px; }
+    .detail-col.amazon h4 { color:var(--amazon); }
+    .detail-col.bm h4 { color:var(--bm); }
+    .detail-col.ebay h4 { color:var(--ebay); }
+    .listing-card { display:flex; gap:10px; padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:8px; text-decoration:none; color:inherit; transition:background .12s; }
+    .listing-card:hover { background:#252839; }
+    .listing-img { width:50px; height:50px; object-fit:contain; border-radius:6px; background:var(--bg); flex-shrink:0; }
+    .listing-img-ph { width:50px; height:50px; background:var(--border); border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:18px; }
+    .listing-info { flex:1; min-width:0; }
+    .listing-title { font-size:.78rem; font-weight:500; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-bottom:4px; }
+    .listing-price { font-size:.92rem; font-weight:700; }
+    .listing-price.amazon { color:var(--amazon); }
+    .listing-price.bm { color:var(--bm); }
+    .listing-price.ebay { color:var(--ebay); }
+    .listing-meta { font-size:.7rem; color:var(--muted); margin-top:2px; }
+    .err-msg { font-size:.78rem; color:var(--muted); font-style:italic; padding:8px 0; }
+
+    /* ── History Tab ── */
+    .filters { display:flex; gap:16px; flex-wrap:wrap; padding:16px 20px; border-bottom:1px solid var(--border); align-items:flex-end; }
+    .filter-group { display:flex; flex-direction:column; gap:5px; }
+    .filter-group label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+    .filter-group select, .filter-group input[type=date] {
+      background:var(--bg); border:1px solid var(--border); border-radius:7px;
+      padding:7px 12px; color:var(--text); font-size:.82rem; outline:none; min-width:160px;
+    }
+    .filter-group select:focus, .filter-group input[type=date]:focus { border-color:var(--bm); }
+    .filter-group select[multiple] { height:90px; }
+    .src-checks { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .src-check { display:flex; align-items:center; gap:5px; font-size:.82rem; cursor:pointer; }
+    .src-check input { accent-color:var(--bm); }
+    .chart-wrap { padding:20px; }
+    canvas#priceChart { max-height:340px; }
+
+    /* ── History data table ── */
+    .hist-tbl-wrap { overflow-x:auto; }
+    table.hist-tbl { width:100%; border-collapse:collapse; }
+    table.hist-tbl th { padding:9px 14px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+    table.hist-tbl td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:.82rem; }
+    table.hist-tbl tr:last-child td { border-bottom:none; }
+    .src-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+    .src-dot.amazon { background:var(--amazon); }
+    .src-dot.backmarket { background:var(--bm); }
+    .src-dot.ebay { background:var(--ebay); }
+
+    /* ── Misc ── */
+    .empty-state { text-align:center; padding:40px 20px; color:var(--muted); }
+    .empty-state .icon { font-size:42px; margin-bottom:12px; }
+    .empty-state p { font-size:.88rem; max-width:340px; margin:0 auto; line-height:1.6; }
+    .search-status { font-size:.82rem; color:var(--muted); }
+    .hidden { display:none !important; }
+    a { color:inherit; }
+    .del-btn { background:none; border:none; color:var(--red); cursor:pointer; font-size:.8rem; opacity:.6; }
+    .del-btn:hover { opacity:1; }
+
+    /* ── Summary bar ── */
+    .summary-strip { display:flex; gap:0; border-top:1px solid var(--border); }
+    .sum-item { flex:1; padding:14px 18px; border-right:1px solid var(--border); }
+    .sum-item:last-child { border-right:none; }
+    .sum-label { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:4px; }
+    .sum-value { font-size:1rem; font-weight:700; }
+    .sum-value.green { color:var(--bm); }
+    .sum-value.orange { color:var(--amazon); }
+    .sum-value.blue { color:var(--ebay); }
+    @media(max-width:600px) { .summary-strip { flex-direction:column; } .sum-item { border-right:none; border-bottom:1px solid var(--border); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔍</div>
+  <div>
+    <h1>Price Tracker <small>Amazon · Back Market · eBay</small></h1>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-panel="search">🔍 Search</button>
+  <button class="tab-btn" data-panel="history">📈 Price History</button>
+</nav>
+
+<main>
+
+  <!-- ═══════════════════ SEARCH TAB ═══════════════════ -->
+  <div id="panel-search" class="panel active">
+
+    <!-- Input card -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Products</h2>
+        <div class="card-actions">
+          <button class="btn btn-secondary btn-sm" onclick="Table.addRow()">+ Add Row</button>
+          <label class="btn-upload btn-sm" style="padding:5px 10px;font-size:.75rem;font-weight:600;">
+            📂 Import CSV
+            <input type="file" accept=".csv,.txt" style="display:none" onchange="Table.importCsv(this.files[0]);this.value=''">
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="Table.downloadTemplate()">↓ Template</button>
+          <button class="btn btn-danger btn-sm" onclick="Table.clear()">Clear All</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="input-tbl">
+          <thead>
+            <tr>
+              <th style="width:32px">#</th>
+              <th>Brand <span style="color:var(--bm)">*</span></th>
+              <th>Product Name <span style="color:var(--bm)">*</span></th>
+              <th>SKU</th>
+              <th>RAM</th>
+              <th>Storage</th>
+              <th style="width:36px"></th>
+            </tr>
+          </thead>
+          <tbody id="inputTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card-foot">
+        <button class="btn btn-primary" id="searchBtn" onclick="Search.start()">🔍 Search All Prices</button>
+        <span class="search-status" id="searchStatusText"></span>
+      </div>
+    </div>
+
+    <!-- Progress (hidden until search) -->
+    <div class="card hidden" id="progressCard">
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span id="progressLabel"><span class="spinner"></span> Searching…</span>
+          <span id="progressCount">0 / 0</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- Results card -->
+    <div class="card hidden" id="resultsCard">
+      <div class="card-head"><h2>Results</h2><span id="resultsTimestamp" style="font-size:.72rem;color:var(--muted)"></span></div>
+
+      <div class="table-wrap">
+        <table class="res-tbl" id="resTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Product</th>
+              <th style="color:var(--amazon)">Amazon</th>
+              <th style="color:var(--bm)">Back Market</th>
+              <th style="color:var(--ebay)">eBay</th>
+              <th>Best Deal</th>
+              <th>Savings</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="resTbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Summary strip -->
+      <div class="summary-strip" id="summaryStrip">
+        <div class="sum-item"><div class="sum-label">Amazon Best</div><div class="sum-value orange" id="sumAmazon">—</div></div>
+        <div class="sum-item"><div class="sum-label">Back Market Best</div><div class="sum-value green" id="sumBM">—</div></div>
+        <div class="sum-item"><div class="sum-label">eBay Best</div><div class="sum-value blue" id="sumEbay">—</div></div>
+        <div class="sum-item"><div class="sum-label">Overall Best Deal</div><div class="sum-value green" id="sumBest">—</div></div>
+        <div class="sum-item"><div class="sum-label">Max Savings</div><div class="sum-value green" id="sumSavings">—</div></div>
+      </div>
+    </div>
+
+  </div><!-- /panel-search -->
+
+
+  <!-- ═══════════════════ HISTORY TAB ═══════════════════ -->
+  <div id="panel-history" class="panel">
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Price Trend Chart</h2>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-sm" onclick="History.load()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>Products</label>
+          <select id="filterProducts" multiple size="4" onchange="History.applyFilters()"></select>
+        </div>
+        <div class="filter-group">
+          <label>Sources</label>
+          <div class="src-checks">
+            <label class="src-check"><input type="checkbox" value="amazon"     checked onchange="History.applyFilters()"><span style="color:var(--amazon)">Amazon</span></label>
+            <label class="src-check"><input type="checkbox" value="backmarket" checked onchange="History.applyFilters()"><span style="color:var(--bm)">Back Market</span></label>
+            <label class="src-check"><input type="checkbox" value="ebay"       checked onchange="History.applyFilters()"><span style="color:var(--ebay)">eBay</span></label>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>From</label>
+          <input type="date" id="filterStart" onchange="History.applyFilters()">
+        </div>
+        <div class="filter-group">
+          <label>To</label>
+          <input type="date" id="filterEnd" onchange="History.applyFilters()">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="History.clearFilters()">Clear Filters</button>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+        <div class="empty-state hidden" id="chartEmpty">
+          <div class="icon">📊</div>
+          <p>No data to display. Run some searches first, then come back here to see price trends.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products in history -->
+    <div class="card">
+      <div class="card-head"><h2>Tracked Products</h2></div>
+      <div id="histProductsList">
+        <div class="empty-state" id="histProductsEmpty">
+          <div class="icon">📦</div>
+          <p>No products tracked yet. Use the Search tab to fetch prices.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Snapshot data table -->
+    <div class="card">
+      <div class="card-head"><h2>Price Snapshot Log</h2></div>
+      <div class="hist-tbl-wrap">
+        <table class="hist-tbl">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Source</th>
+              <th>Best Price</th>
+              <th>Fetched At</th>
+            </tr>
+          </thead>
+          <tbody id="histTbody">
+            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:30px">No data yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /panel-history -->
+</main>
+
+<script>
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtPrice(v) { return v != null ? `$${parseFloat(v).toFixed(2)}` : 'N/A'; }
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function bestOf(items) {
+  if (!Array.isArray(items)) return null;
+  const vals = items.map(p => p.priceValue).filter(v => v != null && v > 0);
+  return vals.length ? Math.min(...vals) : null;
+}
+
+// ─── Tab system ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('panel-' + btn.dataset.panel).classList.add('active');
+    if (btn.dataset.panel === 'history') History.load();
+  });
+});
+
+// ─── Input Table ──────────────────────────────────────────────────────────────
+const Table = {
+  count: 0,
+
+  addRow(data = {}) {
+    this.count++;
+    const tr = document.createElement('tr');
+    tr.dataset.id = this.count;
+    tr.innerHTML = `
+      <td class="rn">${this.count}</td>
+      <td><input type="text" class="f-brand"   value="${esc(data.brand||'')}"       placeholder="Apple"></td>
+      <td><input type="text" class="f-name"    value="${esc(data.productName||'')}" placeholder="iPhone 14"></td>
+      <td><input type="text" class="f-sku"     value="${esc(data.sku||'')}"         placeholder="Optional"></td>
+      <td><input type="text" class="f-ram"     value="${esc(data.ram||'')}"         placeholder="8GB"></td>
+      <td><input type="text" class="f-storage" value="${esc(data.storage||'')}"     placeholder="256GB"></td>
+      <td><button class="btn-icon" title="Remove row" onclick="Table.removeRow(this)">✕</button></td>`;
+    $('inputTbody').appendChild(tr);
+    tr.querySelector('.f-brand').focus();
+  },
+
+  removeRow(btn) {
+    btn.closest('tr').remove();
+    this.renumber();
+  },
+
+  renumber() {
+    $('inputTbody').querySelectorAll('tr').forEach((tr, i) => {
+      tr.querySelector('.rn').textContent = i + 1;
+    });
+  },
+
+  getProducts() {
+    return [...$('inputTbody').querySelectorAll('tr')].map(tr => ({
+      brand:       tr.querySelector('.f-brand').value.trim(),
+      productName: tr.querySelector('.f-name').value.trim(),
+      sku:         tr.querySelector('.f-sku').value.trim(),
+      ram:         tr.querySelector('.f-ram').value.trim(),
+      storage:     tr.querySelector('.f-storage').value.trim(),
+    })).filter(p => p.brand || p.productName);
+  },
+
+  importCsv(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const lines = e.target.result.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const start = lines[0].toLowerCase().includes('brand') ? 1 : 0;
+      lines.slice(start).forEach(line => {
+        const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g,''));
+        const [brand='', productName='', sku='', ram='', storage=''] = parts;
+        if (brand || productName) this.addRow({ brand, productName, sku, ram, storage });
+      });
+    };
+    reader.readAsText(file);
+  },
+
+  downloadTemplate() {
+    const csv = 'brand,productName,sku,ram,storage\nApple,iPhone 14,MQDY3LL/A,6GB,128GB\nSamsung,Galaxy S23,,8GB,256GB\nApple,MacBook Pro,,16GB,512GB\n';
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'products_template.csv';
+    a.click();
+  },
+
+  clear() {
+    $('inputTbody').innerHTML = '';
+    this.count = 0;
+    $('resultsCard').classList.add('hidden');
+    $('progressCard').classList.add('hidden');
+    $('searchStatusText').textContent = '';
+  }
+};
+
+// ─── Search (SSE bulk) ────────────────────────────────────────────────────────
+const Search = {
+  total: 0,
+  done: 0,
+  allResults: [],
+  evtSource: null,
+
+  start() {
+    const products = Table.getProducts();
+    if (!products.length) { alert('Add at least one product row.'); return; }
+
+    // Reset UI
+    this.total = products.length;
+    this.done  = 0;
+    this.allResults = new Array(products.length).fill(null);
+    $('searchBtn').disabled = true;
+    $('progressCard').classList.remove('hidden');
+    $('resultsCard').classList.add('hidden');
+    $('progressFill').style.width = '0%';
+    $('progressLabel').innerHTML = '<span class="spinner"></span> Searching…';
+    $('progressCount').textContent = `0 / ${this.total}`;
+    $('searchStatusText').textContent = '';
+
+    // Build results table skeleton
+    this.buildResultsSkeleton(products);
+    $('resultsCard').classList.remove('hidden');
+
+    // POST → get jobId
+    fetch('/api/search/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products }),
+    })
+    .then(r => r.json())
+    .then(({ jobId }) => {
+      if (this.evtSource) this.evtSource.close();
+      this.evtSource = new EventSource(`/api/search/stream/${jobId}`);
+      this.evtSource.addEventListener('result',   e => this.onResult(JSON.parse(e.data)));
+      this.evtSource.addEventListener('complete', e => this.onComplete(JSON.parse(e.data)));
+      this.evtSource.onerror = () => { this.evtSource.close(); this.finish(); };
+    })
+    .catch(err => { alert('Error: ' + err.message); this.finish(); });
+  },
+
+  buildResultsSkeleton(products) {
+    const tbody = $('resTbody');
+    tbody.innerHTML = '';
+    products.forEach((p, i) => {
+      const label = [p.brand, p.productName, p.ram, p.storage].filter(Boolean).join(' ');
+      // Summary row
+      const tr = document.createElement('tr');
+      tr.className = 'summary-row';
+      tr.id = `srow-${i}`;
+      tr.onclick = () => this.toggleDetail(i);
+      tr.innerHTML = `
+        <td class="rn">${i+1}</td>
+        <td><div class="product-label">${esc(label)}</div>${p.sku ? `<div class="product-sub">SKU: ${esc(p.sku)}</div>` : ''}</td>
+        <td id="cell-amazon-${i}" class="price-cell none">—</td>
+        <td id="cell-bm-${i}"     class="price-cell none">—</td>
+        <td id="cell-ebay-${i}"   class="price-cell none">—</td>
+        <td id="cell-best-${i}">—</td>
+        <td id="cell-save-${i}">—</td>
+        <td><span id="expand-${i}" style="font-size:.8rem;color:var(--muted)">▸</span></td>`;
+      tbody.appendChild(tr);
+      // Searching badge
+      tr.querySelector(`#cell-amazon-${i}`).innerHTML = '<span class="badge-status-searching"><span class="spinner"></span></span>';
+      tr.querySelector(`#cell-bm-${i}`).innerHTML     = '<span class="badge-status-searching"><span class="spinner"></span></span>';
+      tr.querySelector(`#cell-ebay-${i}`).innerHTML   = '<span class="badge-status-searching"><span class="spinner"></span></span>';
+      // Detail row
+      const dr = document.createElement('tr');
+      dr.className = 'detail-row hidden';
+      dr.id = `drow-${i}`;
+      dr.innerHTML = `<td colspan="8"><div class="detail-inner" id="detail-${i}"></div></td>`;
+      tbody.appendChild(dr);
+    });
+    $('summaryStrip').querySelectorAll('.sum-value').forEach(el => el.textContent = '—');
+  },
+
+  onResult(data) {
+    const i = data.index;
+    this.allResults[i] = data;
+    this.done++;
+    this.updateProgress();
+
+    const amazonBest = bestOf(data.amazon);
+    const bmBest     = bestOf(data.backmarket);
+    const ebayBest   = bestOf(data.ebay);
+
+    const setCellPrice = (id, val, cls) => {
+      const el = $(id);
+      if (!el) return;
+      if (val != null) {
+        el.className = `price-cell ${cls}`;
+        el.textContent = fmtPrice(val);
+      } else {
+        el.className = 'price-cell none';
+        el.innerHTML = data[cls === 'bm' ? 'backmarket' : cls]?.error
+          ? `<span title="${esc(data[cls === 'bm' ? 'backmarket' : cls].error)}" style="cursor:help">N/A ⚠</span>`
+          : 'N/A';
+      }
+    };
+    setCellPrice(`cell-amazon-${i}`, amazonBest, 'amazon');
+    setCellPrice(`cell-bm-${i}`,     bmBest,     'bm');
+    setCellPrice(`cell-ebay-${i}`,   ebayBest,   'ebay');
+
+    // Best deal cell
+    const prices = [
+      { val: amazonBest, label: 'Amazon', cls: 'amazon' },
+      { val: bmBest,     label: 'Back Market', cls: 'bm' },
+      { val: ebayBest,   label: 'eBay', cls: 'ebay' },
+    ].filter(p => p.val != null);
+    if (prices.length) {
+      prices.sort((a,b) => a.val - b.val);
+      const best = prices[0];
+      const worst = prices[prices.length - 1];
+      const savings = worst.val - best.val;
+      $(`cell-best-${i}`).innerHTML = `<span class="badge badge-best">${fmtPrice(best.val)}</span><br><span style="font-size:.7rem;color:var(--muted)">${best.label}</span>`;
+      $(`cell-save-${i}`).innerHTML = savings > 0.5 ? `<span class="badge badge-saving">$${savings.toFixed(2)}</span>` : '—';
+    }
+
+    // Pre-build detail
+    this.buildDetail(i, data);
+    this.updateSummaryStrip();
+  },
+
+  buildDetail(i, data) {
+    const div = $(`detail-${i}`);
+    if (!div) return;
+    const sources = [
+      { key: 'amazon',     cls: 'amazon',     label: '🛒 Amazon',      priceCls: 'amazon' },
+      { key: 'backmarket', cls: 'bm',          label: '♻️ Back Market', priceCls: 'bm' },
+      { key: 'ebay',       cls: 'ebay',        label: '🏷️ eBay',        priceCls: 'ebay' },
+    ];
+    div.innerHTML = `<div class="detail-grid">${sources.map(s => {
+      const items = Array.isArray(data[s.key]) ? data[s.key] : [];
+      const error = data[s.key]?.error;
+      return `<div class="detail-col ${s.cls}">
+        <h4>${s.label} ${items.length ? `(${items.length})` : ''}</h4>
+        ${error ? `<div class="err-msg">⚠ ${esc(error)}</div>` : ''}
+        ${items.map(p => {
+          const imgHtml = p.image
+            ? `<img class="listing-img" src="${esc(p.image)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+            : '';
+          return `<a class="listing-card" href="${esc(p.link)}" target="_blank" rel="noopener">
+            ${imgHtml}<div class="listing-img-ph" ${p.image ? 'style="display:none"':''}>📦</div>
+            <div class="listing-info">
+              <div class="listing-title">${esc(p.title)}</div>
+              <div class="listing-price ${s.priceCls}">${esc(p.price)}</div>
+              <div class="listing-meta">${esc(p.condition)}${p.rating && p.rating!=='N/A' ? ' · ★ '+esc(p.rating.match(/[\d.]+/)?.[0]||p.rating) : ''}${p.reviews ? ' · '+esc(p.reviews):''}</div>
+            </div>
+          </a>`;
+        }).join('')}
+        ${!items.length && !error ? '<div class="err-msg">No results found</div>' : ''}
+      </div>`;
+    }).join('')}</div>`;
+    $(`expand-${i}`).textContent = '▸';
+  },
+
+  toggleDetail(i) {
+    const dr = $(`drow-${i}`);
+    const ex = $(`expand-${i}`);
+    if (!dr) return;
+    const isHidden = dr.classList.contains('hidden');
+    dr.classList.toggle('hidden', !isHidden);
+    if (ex) ex.textContent = isHidden ? '▾' : '▸';
+  },
+
+  updateProgress() {
+    const pct = Math.round((this.done / this.total) * 100);
+    $('progressFill').style.width = pct + '%';
+    $('progressCount').textContent = `${this.done} / ${this.total}`;
+  },
+
+  onComplete({ total }) {
+    if (this.evtSource) { this.evtSource.close(); this.evtSource = null; }
+    $('progressLabel').textContent = `✓ Done — ${total} product${total!==1?'s':''} searched`;
+    $('progressFill').style.width = '100%';
+    $('resultsTimestamp').textContent = 'Updated ' + fmtDate(new Date().toISOString());
+    this.finish();
+  },
+
+  updateSummaryStrip() {
+    const completed = this.allResults.filter(Boolean);
+    const allAmazon = completed.flatMap(r => Array.isArray(r.amazon) ? r.amazon.map(p=>p.priceValue).filter(v=>v>0) : []);
+    const allBM     = completed.flatMap(r => Array.isArray(r.backmarket) ? r.backmarket.map(p=>p.priceValue).filter(v=>v>0) : []);
+    const allEbay   = completed.flatMap(r => Array.isArray(r.ebay) ? r.ebay.map(p=>p.priceValue).filter(v=>v>0) : []);
+    const minA = allAmazon.length ? Math.min(...allAmazon) : null;
+    const minB = allBM.length ? Math.min(...allBM) : null;
+    const minE = allEbay.length ? Math.min(...allEbay) : null;
+    $('sumAmazon').textContent = minA ? fmtPrice(minA) : '—';
+    $('sumBM').textContent     = minB ? fmtPrice(minB) : '—';
+    $('sumEbay').textContent   = minE ? fmtPrice(minE) : '—';
+    const allPrices = [minA, minB, minE].filter(v=>v!=null);
+    if (allPrices.length) {
+      const overall = Math.min(...allPrices);
+      const worst   = Math.max(...allPrices);
+      $('sumBest').textContent    = fmtPrice(overall);
+      $('sumSavings').textContent = fmtPrice(worst - overall);
+    }
+  },
+
+  finish() {
+    $('searchBtn').disabled = false;
+    $('searchStatusText').textContent = `${this.done} of ${this.total} products completed`;
+  }
+};
+
+// Pre-populate 2 empty rows on load
+Table.addRow();
+Table.addRow();
+
+// ─── History Tab ──────────────────────────────────────────────────────────────
+let priceChartInstance = null;
+
+const History = {
+  products: [],
+  snapshots: [],
+
+  async load() {
+    try {
+      const [prods, snaps] = await Promise.all([
+        fetch('/api/history/products').then(r=>r.json()),
+        fetch('/api/history/prices').then(r=>r.json()),
+      ]);
+      this.products  = prods;
+      this.snapshots = snaps;
+      this.populateProductFilter();
+      this.renderProductsList();
+      this.applyFilters();
+    } catch(e) {
+      console.error('History load error:', e);
+    }
+  },
+
+  populateProductFilter() {
+    const sel = $('filterProducts');
+    const prev = [...sel.selectedOptions].map(o=>o.value);
+    sel.innerHTML = this.products.map(p => {
+      const label = [p.brand, p.product_name, p.ram, p.storage].filter(Boolean).join(' ');
+      const sel = prev.includes(String(p.id)) ? 'selected' : '';
+      return `<option value="${p.id}" ${sel}>${esc(label)}</option>`;
+    }).join('');
+  },
+
+  getFilters() {
+    const selProd = [...$('filterProducts').selectedOptions].map(o=>parseInt(o.value));
+    const selSrc  = [...document.querySelectorAll('.src-checks input:checked')].map(i=>i.value);
+    const start   = $('filterStart').value;
+    const end     = $('filterEnd').value;
+    return { productIds: selProd, sources: selSrc, startDate: start, endDate: end };
+  },
+
+  applyFilters() {
+    const { productIds, sources, startDate, endDate } = this.getFilters();
+    let snaps = this.snapshots;
+    if (productIds.length) snaps = snaps.filter(s => productIds.includes(s.product_id));
+    if (sources.length)    snaps = snaps.filter(s => sources.includes(s.source));
+    if (startDate) snaps = snaps.filter(s => s.fetched_at >= startDate);
+    if (endDate)   snaps = snaps.filter(s => s.fetched_at <= endDate + 'T23:59:59');
+    this.renderChart(snaps);
+    this.renderTable(snaps);
+  },
+
+  clearFilters() {
+    $('filterProducts').selectedIndex = -1;
+    document.querySelectorAll('.src-checks input').forEach(i => { i.checked = true; });
+    $('filterStart').value = '';
+    $('filterEnd').value   = '';
+    this.applyFilters();
+  },
+
+  renderChart(snaps) {
+    const canvas  = $('priceChart');
+    const emptyEl = $('chartEmpty');
+    if (!snaps.length) {
+      canvas.classList.add('hidden');
+      emptyEl.classList.remove('hidden');
+      if (priceChartInstance) { priceChartInstance.destroy(); priceChartInstance = null; }
+      return;
+    }
+    canvas.classList.remove('hidden');
+    emptyEl.classList.add('hidden');
+
+    // Build datasets: one per (product_id, source)
+    const combos = [...new Map(snaps.map(s => [
+      `${s.product_id}|${s.source}`,
+      { productId: s.product_id, source: s.source,
+        label: [s.brand, s.product_name, s.ram, s.storage].filter(Boolean).join(' ') + ` (${s.source})` }
+    ])).values()];
+
+    const allTimes = [...new Set(snaps.map(s => s.fetched_at.slice(0,16)))].sort();
+    const labels   = allTimes.map(t => fmtDate(t + ':00'));
+
+    const SRC_PALETTES = {
+      amazon:     ['#ff9900','#e8a010','#cc8800','#b37700'],
+      backmarket: ['#25c88d','#1daa78','#15905f','#0d7a4e'],
+      ebay:       ['#3665f3','#4d7af5','#1a52e0','#0040c8'],
+    };
+    const srcCounters = { amazon:0, backmarket:0, ebay:0 };
+
+    const datasets = combos.map(combo => {
+      const palette = SRC_PALETTES[combo.source] || ['#888'];
+      const color   = palette[srcCounters[combo.source] % palette.length];
+      srcCounters[combo.source]++;
+      const comboSnaps = snaps.filter(s => s.product_id === combo.productId && s.source === combo.source);
+      const byTime = new Map(comboSnaps.map(s => [s.fetched_at.slice(0,16), s.best_price]));
+      return {
+        label: combo.label,
+        data: allTimes.map(t => byTime.get(t) ?? null),
+        borderColor: color, backgroundColor: color + '20',
+        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+        tension: 0.3, spanGaps: true, fill: false,
+      };
+    });
+
+    if (priceChartInstance) priceChartInstance.destroy();
+    priceChartInstance = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#e8eaf0', font: { size: 11 }, usePointStyle: true } },
+          tooltip: {
+            backgroundColor: '#1a1d27', borderColor: '#2d3048', borderWidth: 1,
+            titleColor: '#e8eaf0', bodyColor: '#8b90a8',
+            callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw != null ? '$' + ctx.raw.toFixed(2) : 'N/A'}` }
+          }
+        },
+        scales: {
+          x: { ticks: { color:'#8b90a8', maxRotation:40, font:{size:10} }, grid: { color:'#2d3048' } },
+          y: {
+            ticks: { color:'#8b90a8', callback: v => '$' + v, font:{size:11} },
+            grid: { color:'#2d3048' },
+            beginAtZero: false,
+          }
+        }
+      }
+    });
+  },
+
+  renderProductsList() {
+    const el = $('histProductsList');
+    if (!this.products.length) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">📦</div><p>No products tracked yet.</p></div>`;
+      return;
+    }
+    el.innerHTML = `
+      <table class="hist-tbl">
+        <thead><tr>
+          <th>Product</th><th>SKU</th><th>RAM</th><th>Storage</th>
+          <th>First Seen</th><th>Last Updated</th><th>Snapshots</th><th></th>
+        </tr></thead>
+        <tbody>${this.products.map(p => `
+          <tr>
+            <td><strong>${esc([p.brand, p.product_name].filter(Boolean).join(' '))}</strong></td>
+            <td>${esc(p.sku||'—')}</td>
+            <td>${esc(p.ram||'—')}</td>
+            <td>${esc(p.storage||'—')}</td>
+            <td style="color:var(--muted)">${fmtDate(p.first_seen)}</td>
+            <td style="color:var(--muted)">${fmtDate(p.last_seen)}</td>
+            <td>${p.snapshot_count}</td>
+            <td><button class="del-btn" onclick="History.deleteProduct(${p.id})" title="Delete product and all history">🗑</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  },
+
+  renderTable(snaps) {
+    const tbody = $('histTbody');
+    if (!snaps.length) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:30px">No snapshots match the current filters.</td></tr>`;
+      return;
+    }
+    // Show latest 200, most recent first
+    const sorted = [...snaps].sort((a,b) => b.fetched_at.localeCompare(a.fetched_at)).slice(0,200);
+    tbody.innerHTML = sorted.map(s => {
+      const productLabel = [s.brand, s.product_name, s.ram, s.storage].filter(Boolean).join(' ');
+      return `<tr>
+        <td>${esc(productLabel)}</td>
+        <td><span class="src-dot ${s.source}"></span>${s.source==='backmarket'?'Back Market':s.source==='amazon'?'Amazon':'eBay'}</td>
+        <td><strong style="color:${s.source==='amazon'?'var(--amazon)':s.source==='backmarket'?'var(--bm)':'var(--ebay)'}">${s.best_price!=null?fmtPrice(s.best_price):'N/A'}</strong></td>
+        <td style="color:var(--muted)">${fmtDate(s.fetched_at)}</td>
+      </tr>`;
+    }).join('');
+  },
+
+  async deleteProduct(id) {
+    if (!confirm('Delete this product and all its price history?')) return;
+    await fetch(`/api/history/product/${id}`, { method:'DELETE' });
+    await this.load();
+  }
+};
+</script>
+</body>
+</html>
